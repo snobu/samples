@@ -21,7 +21,6 @@
     OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
     THE SOFTWARE.
 */
-
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -41,14 +40,10 @@ namespace IoTCoreDefaultApp
         public static string GetDirectConnectionName()
         {
             var icp = NetworkInformation.GetInternetConnectionProfile();
-            if (icp != null)
-            {
-                if(icp.NetworkAdapter.IanaInterfaceType == EthernetIanaType)
-                {
-                    return icp.ProfileName;
-                }
-            }
-            return ("None found");
+
+            var interfaceType = icp == null ? 0 : icp.NetworkAdapter.IanaInterfaceType;
+
+            return (interfaceType == EthernetIanaType ? icp.ProfileName : "None found");
         }
 
         public static string GetCurrentNetworkName()
@@ -57,11 +52,12 @@ namespace IoTCoreDefaultApp
             return icp != null ? icp.ProfileName : null;
         }
 
-        public static string GetCurrentIpv4Address()
+        public static string GetCurrentIPAddress()
         {
             var icp = NetworkInformation.GetInternetConnectionProfile();
             if (icp != null && icp.NetworkAdapter != null && icp.NetworkAdapter.NetworkAdapterId != null)
             {
+                var ipaddr = String.Empty;
                 var name = icp.ProfileName;
 
                 var hostnames = NetworkInformation.GetHostNames();
@@ -72,11 +68,12 @@ namespace IoTCoreDefaultApp
                         hn.IPInformation.NetworkAdapter != null &&
                         hn.IPInformation.NetworkAdapter.NetworkAdapterId != null &&
                         hn.IPInformation.NetworkAdapter.NetworkAdapterId == icp.NetworkAdapter.NetworkAdapterId &&
-                        hn.Type == HostNameType.Ipv4)
+                        (hn.Type == HostNameType.Ipv4 || hn.Type == HostNameType.Ipv6))
                     {
-                        return hn.CanonicalName;
+                        ipaddr += hn.CanonicalName + "\n"; 
                     }
                 }
+                return ipaddr.Trim();
             }
 
             return "<no Internet connection>";
@@ -93,15 +90,9 @@ namespace IoTCoreDefaultApp
                 return false;
             }
 
-            try
-            {
-                var adapters = await WiFiAdapter.FindAllAdaptersAsync();
-                return adapters.Count > 0;
-            }
-            catch (Exception)
-            {
-                return false;
-            }
+            var adapters = await WiFiAdapter.FindAllAdaptersAsync();
+
+            return adapters.Count > 0;
         }
 
         private async Task<bool> UpdateInfo()
@@ -124,7 +115,7 @@ namespace IoTCoreDefaultApp
                     continue;
                 }
 
-                foreach (var network in adapter.NetworkReport.AvailableNetworks)
+                foreach(var network in adapter.NetworkReport.AvailableNetworks)
                 {
                     if (!string.IsNullOrEmpty(network.Ssid))
                     {
@@ -212,57 +203,6 @@ namespace IoTCoreDefaultApp
             }
 
             return (accessStatus == WiFiAccessStatus.Allowed);
-        }
-
-
-        public class NetworkInfo
-        {
-            public string NetworkName { get; set; }
-            public string NetworkIpv6 { get; set; }
-            public string NetworkIpv4 { get; set; }
-            public string NetworkStatus { get; set; }
-        }
-
-        public static async Task<IList<NetworkInfo>> GetNetworkInformation()
-        {
-            var networkList = new Dictionary<string, NetworkInfo>();
-            var hostNamesList = NetworkInformation.GetHostNames();
-
-            foreach (var hostName in hostNamesList)
-            {
-                if ((hostName.Type == HostNameType.Ipv4 || hostName.Type == HostNameType.Ipv6) &&
-                    (hostName != null && hostName.IPInformation != null && hostName.IPInformation.NetworkAdapter != null))
-                {
-                    var profile = await hostName.IPInformation.NetworkAdapter.GetConnectedProfileAsync();
-                    if (profile != null)
-                    {
-                        NetworkInfo info;
-                        var found = networkList.TryGetValue(profile.ProfileName, out info);
-                        if (!found)
-                        {
-                            info = new NetworkInfo();
-                            info.NetworkName = profile.ProfileName;
-                            info.NetworkStatus = profile.GetNetworkConnectivityLevel().ToString();
-                        }
-                        if (hostName.Type == HostNameType.Ipv4)
-                        {
-                            info.NetworkIpv4 = hostName.CanonicalName;
-                        }
-                        else
-                        {
-                            info.NetworkIpv6 = hostName.CanonicalName;
-                        }
-                        if (!found)
-                        {
-                            networkList[profile.ProfileName] = info;
-                        }
-                    }
-                }
-            }
-
-            var res = new List<NetworkInfo>();
-            res.AddRange(networkList.Values);
-            return res;
         }
     }
 }
